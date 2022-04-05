@@ -1,6 +1,10 @@
 // Importation du module express
 const express = require('express');
-const fs = require('fs')
+const fs = require('fs');
+
+// Importation des CORS = Cross Origin Request Sharing
+const cors = require('cors');
+const req = require("express/lib/request");
 
 // Création d'une application avec Express
 const app = express();
@@ -12,17 +16,72 @@ const userList = [
     {id: 3, username: 'Thib Saccx', role: 'user'}
 ]
 
+const userFilePath = './data/users.json';
+
+
+
 // Alias pour le console.log
 const log = console.log;
 
-// Définition des routes
+
+// Definition des middlewares
+const maintenance = false;
+
+app.use('/user*',(req, res, next) => {
+// Ajoute une nouvelle clef à l'objet request
+    req.now = new Date().toLocaleDateString();
+    if(req.query.API_KEY === '123'){
+        next()
+    } else {
+        res.status(403).json({message: 'Non autorisé'});
+    }
+});
+
+
+
+// Lecture de la liste des utilisateurs
+app.use('/user*', async (req, res, next) => {
+    //console.log('test user')
+    try {
+        const data = await fs.promises.readFile(userFilePath);
+        const users = data.toString() || []
+        req.userList = JSON.parse(users);
+        next();
+    } catch (err) {
+        log(err)
+        res.status(500).json({message: 'Impossible de lire le fichier'})
+    }
+});
+
+
+app.use((req, res, next) => {
+    //console.log(req.userList)
+    if(maintenance){
+        res.status(200)
+            .end('Site en maintenance, il revient très vite');
+    } else {
+        next();
+    }
+});
+
+
+app.use(express.static('data'));
+app.use('/img',express.static('data/image'));
+
+app.use(cors());
+
+
+// Definition des routes
 
 app.get( '/user', (req, res) => {
-        res.status(200).json(userList);
+    //console.log(req.userList)
+        // log(req.now);
+        res.status(200).json(req.userList);
     });
 
 app.get( '/user/:id', (req, res) => {
-        const user = userList.find((item) => item.id == req.params.id)
+        // log(req.now);
+    const user = req.userList.find((item) => item.id == req.params.id)
         if(user) {
             res.status(200).json({success: true, data: user})
         } else {
@@ -30,9 +89,28 @@ app.get( '/user/:id', (req, res) => {
         }
     });
 
+app.delete('/user/:id', async (req,res) => {
+    try {
+        const index = req.userList.findIndex(item => item.id == req.params.id);
+        req.userList.splice(index, 1);
+        await fs.promises.writeFile('./data/users.json', JSON.stringify(req.userList));
+        res.status(200).json({success: true, data: req.userList });
+    } catch (err) {
+        res.status(500).json(
+            {
+                success: false,
+                message: 'Impossible de supprimer l\'utilisateur'
+            });
+    }
+
+
+
+
+});
+
 
 app.get( '/', (req, res) => {
-        res.status(200).send('Home sweet home');
+        res.status(200).send(`Home sweet home <img style="width: 50%" src="/image/image.jpg">`);
     });
 
 // Route avec un parametre et un contrainte sur la valeur de ce parametre
